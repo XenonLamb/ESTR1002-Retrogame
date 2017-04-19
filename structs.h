@@ -9,22 +9,30 @@
 struct gameObj
 {
 	int destroyable;
+	int penetration;
+	int hurt;
+	int color;
 	int hp;
+	int speed;
+	int atkspeed;
 	int damage;
 	int x, y;
 	int desx, desy;
 	int height, width;
-	char icon[10][10];
+	int icon[10][10];
+	int attackmode;
 };
 typedef struct gameObj gameobj;
 
 void renderIcon(int x,int y, gameobj obje) {
-	
+	attron(COLOR_PAIR(obje.color));
 	for (int i = 0;i < obje.height;i++) {
-		move(x + i, y);
-		for (int j = 0;j < obje.width;j++)
-			printw("%c", obje.icon[i][j]);
+		for (int j = 0; j < obje.width; j++) {
+			move(x + i, y + j);
+			if (obje.icon[i][j] != ' ') addch(obje.icon[i][j]);
+		}
 	}
+	attroff(COLOR_PAIR(obje.color));
 	return;
 }
 

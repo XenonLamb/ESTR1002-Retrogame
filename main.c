@@ -18,6 +18,7 @@ char* pl_multime;
 FILE *MAP;
 int mapheight, mapwidth;
 int currentmap[40][80];
+gameobj objects[500];
 
 struct SMALL_RECT {
 	SHORT Left;
@@ -255,6 +256,32 @@ int setupObject(int type, double startX, double startY, double speed) {
 
 }
 
+int setupobj(int destroyable, int penetration, int hp, int damage, int x, int y, int desx, int desy, int height, int width, int icon[10][10], int attackmode,int color,int speed,int atkspeed) {
+	for (int i = 0; i < 500; i++) {
+		if (objects[i].destroyable != -1) continue;
+		objects[i].destroyable = destroyable;
+		objects[i].penetration = penetration;
+		objects[i].hp = hp;
+		objects[i].damage = damage;
+		objects[i].x = x;
+		objects[i].y = y;
+		objects[i].desx = desx;
+		objects[i].desy = desy;
+		objects[i].height = height;
+		objects[i].width = width;
+		objects[i].attackmode = attackmode;
+		objects[i].color = color;
+		objects[i].speed = speed;
+		objects[i].atkspeed = atkspeed;
+		for (int p = 0; p < height; p++)
+			for (int q = 0; q < width; q++)
+				objects[i].icon[p][q] = icon[p][q];
+		return(i);
+
+  }
+	return(-1);
+}
+
 int doGameLoop() {
 	// Extended characters table: http://melvilletheatre.com/articles/ncurses-extended-characters/index.html
 	// e.g. addch(97 | A_ALTCHARSET) will print out a "brick" character
@@ -262,7 +289,7 @@ int doGameLoop() {
 	
 	// setup the level and player!
 	clear();
-	playerId = setupObject(PLAYER,SCREEN_WIDTH/2,SCREEN_HEIGHT/2,0.1);
+	playerId = setupObject(PLAYER,SCREEN_WIDTH/2,SCREEN_HEIGHT/2,0.5);
 	
 	tes.destroyable = tes.damage = tes.desx = tes.desy = tes.hp = tes.x = tes.y = 0;
 	tes.width = 5;tes.height = 3;
@@ -327,11 +354,15 @@ int main()
 	timeout(0);				// make getch() non-blocking, i.e. won't stop the program when we ask for user input
 	noecho();				// don't print user input on screen while we do getch 
 	curs_set(0);						// don't display cursor
+	
+	                        // read map from map.in
 	MAP = fopen("map.in", "r");
 	fscanf(MAP, "%d %d", &mapheight, &mapwidth);
 	for (int i = 0; i < mapheight; i++)
 		for (int j = 0; j < mapwidth; j++)
 			fscanf(MAP, "%d", &currentmap[i][j]); 
+	fclose(MAP);
+
 	// Set up colors...colors are always in pairs in a terminal!
 	init_Color();
 	init_main();
@@ -376,6 +407,8 @@ void showcon() {
 		//printw("%c", i);
 		addch(i | A_ALTCHARSET);
 	}
+	//move(5, 0);
+	//addch(97);
 	while (1) {
 		int ch = getch();
 		if (ch == ' ') return;
@@ -389,6 +422,8 @@ void init_main() {
 	pl_onetime= (char*)malloc(20 * sizeof(char));
 	pl_multime = "Roll";
 	pl_onetime = "The moon";
+	for (int i = 0; i < 500; i++)
+		objects[i].destroyable = -1;
 	return;
 }
 
