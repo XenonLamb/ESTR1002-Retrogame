@@ -1,6 +1,7 @@
 #if defined(_WIN32) || defined(_WIN64)
 #include "curses.h"
 #include <Windows.h>
+#include <stdlib.h> 
 #else
 #include "ncurses.h"		// please download yourself on Mac...
 #include <unistd.h>
@@ -8,31 +9,50 @@
 
 struct gameObj
 {
+	int objtype;
+	int hostile;
 	int destroyable;
 	int penetration;
 	int hurt;
 	int color;
 	int hp;
-	int speed;
+	double speed;
 	int atkspeed;
 	int damage;
-	int x, y;
-	int desx, desy;
+	double x, y;
+	double desx, desy;
+	int attackcd;
+	
+};
+
+struct DefObj
+{
+	int destroyable;
+	int penetration;
+	int color;
+	int hp;
+	double speed;
+	int atkspeed;
+	int damage;
 	int height, width;
 	int icon[10][10];
-	int attackmode;
+    int attackmode;
+	int atktype;
+	int hostile;
+	int movemode;
+	int destroydes;
 };
 typedef struct gameObj gameobj;
-
-void renderIcon(int x,int y, gameobj obje) {
-	attron(COLOR_PAIR(obje.color));
+typedef struct DefObj defobj;
+void renderIcon(int x,int y, defobj obje, int color) {
+	attron(COLOR_PAIR(color));
 	for (int i = 0;i < obje.height;i++) {
 		for (int j = 0; j < obje.width; j++) {
-			move(x + i, y + j);
+			move(x + i+10, y + j);
 			if (obje.icon[i][j] != ' ') addch(obje.icon[i][j]);
 		}
 	}
-	attroff(COLOR_PAIR(obje.color));
+	attroff(COLOR_PAIR(color));
 	return;
 }
 
@@ -80,5 +100,43 @@ void init_Color() {
 	init_pair(3, COLOR_RED, COLOR_BLACK);
 	init_pair(4, COLOR_BLUE, COLOR_BLACK);
 	init_pair(5, COLOR_GREEN, COLOR_BLACK);
+	init_pair(6, COLOR_RED, COLOR_WHITE);
 	return;
 }
+
+void init_objlib(defobj lib[]) {               // order of input:  1. number of objs
+	FILE *OBJ;                                // 2. destroyable, penetration, color, hp, speed, atkspeed, damage, attackspeed
+	int n;                                     // 3. height, width
+	OBJ = fopen("objlib.in", "r");             // array icon
+	fscanf(OBJ, "%d", &n);
+	for (int i = 0;i < n;i++) {
+		fscanf(OBJ, "%d", &(lib[i].destroyable));
+		fscanf(OBJ, "%d", &(lib[i].penetration));
+		fscanf(OBJ, "%d", &(lib[i].color));
+		fscanf(OBJ, "%d", &(lib[i].hp));
+		fscanf(OBJ, "%lf", &(lib[i].speed));
+		fscanf(OBJ, "%d", &(lib[i].atkspeed));
+		fscanf(OBJ, "%d", &(lib[i].damage));
+		fscanf(OBJ, "%d", &(lib[i].attackmode));
+		fscanf(OBJ, "%d", &(lib[i].hostile));
+		fscanf(OBJ, "%d", &(lib[i].movemode));
+		fscanf(OBJ, "%d", &(lib[i].destroydes));
+		fscanf(OBJ, "%d", &(lib[i].atktype));
+		fscanf(OBJ, "%d", &(lib[i].height));
+		fscanf(OBJ, "%d", &(lib[i].width));
+		for(int j=0;j<lib[i].height;j++)
+			for(int k=0;k<lib[i].width;k++)
+				fscanf(OBJ, "%d", &(lib[i].icon[j][k]));
+	}
+	fclose(OBJ);
+}
+
+void godie() {
+	clear();
+	move(20, 40);
+	attron(COLOR_PAIR(6));
+	printw("You Died");
+	attron(COLOR_PAIR(6));
+	refresh();
+}
+

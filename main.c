@@ -1,5 +1,4 @@
 ﻿#include"structs.h"
-#include <stdlib.h> 
 #include <time.h>
 #include <math.h>
 
@@ -13,13 +12,16 @@ int plhplim = 15;
 int playermoney = 0;
 int playerkey = 0;
 int playerbomb = 1;
+int shootrange = 20;
 char* pl_onetime;
 char* pl_multime;
 FILE *MAP;
 int mapheight, mapwidth;
 int currentmap[40][80];
 gameobj objects[500];
-
+defobj objlib[100];
+double dirx[8] = { 2,-2,0,0,2,-2,-2,2 };
+double diry[8] = { 0,0,2,-2,2,-2,2,-2 };
 struct SMALL_RECT {
 	SHORT Left;
 	SHORT Top;
@@ -46,6 +48,35 @@ void sleep(unsigned ms) {
 void showcon();
 void init_main();
 void drawmap(int px,int py);
+
+defobj getdef(int x) {  // get the corresponding defobj
+	return(objlib[objects[x].objtype]);
+}
+int cango(defobj temp, int x, int y) {
+	for (int i = 0;i < temp.height;i++)
+		for (int j = 0;j < temp.width;j++)
+			if ((temp.icon[i][j] != ' ') && (currentmap[x + i][y + j] == 1)) return 1;
+	return 0;
+}
+
+bool overlap(int a, int b) {
+	defobj tem1, tem2;
+	tem1 = getdef(a); tem2 = getdef(b);
+	int px1 = objects[a].x, py1 = objects[a].y, px2 = objects[b].x, py2 = objects[b].y;
+	if (px1 > (px2 + tem2.height)) return 0;
+	if (px2>(px1 + tem1.height)) return 0;
+	if (py1 > (py2 + tem2.width)) return 0;
+	if (py2 >(py1 + tem1.width)) return 0;
+	for(int i1=0;i1<tem1.height;i1++)
+		for(int j1=0;j1<tem1.width;j1++)
+			for (int i2 = 0;i2<tem2.height;i2++)
+				for (int j2 = 0;j2 < tem2.width;j2++) {
+					if (((px1 + i1) == (px2 + i2)) && ((py1 + j1) == (py2 + j2)))
+						if ((tem1.icon[i1][j1] != ' ') && (tem2.icon[i2][j2] != ' '))
+							return 1;
+				}
+	return 0;
+}
 
 void adjustWindowSize()
 {
@@ -163,29 +194,124 @@ GameObject gameObject[100];		// stores all game object!
 int playerId;
 Direction playerFacing;
 
-void moveObjects() {
-	for (int i = 0; i < 100; i++) {
-		if (gameObject[i].type == NOTHING)
-			continue;
+void calDamage() {
+	for (int i = 0;i < 500;i++) {
+		if (objects[i].objtype != -1) {
+			int termi = 0;
+			for (int j = 0;j < 500;j++) 
+				if ((objects[j].objtype != -1)&&(objects[i].hostile!=objects[j].hostile)) {
+					if (overlap(i, j) == 1) {
+						if (objects[j].damage > 0) {
+							if ((objects[i].destroyable == 1) && (objects[i].hurt <= 0)) {
+								objects[i].hp -= objects[j].damage;
+								if (i == playerId) objects[i].hurt = 15;
+								   else objects[i].hurt = 2;
+								if (objects[i].hp <= 0) {
+									if(i!=playerId) objects[i].objtype = -1; termi = 1;
+								}
 
-		double dispX = gameObject[i].destX - gameObject[i].x;
-		double dispY = gameObject[i].destY - gameObject[i].y;
+							}
+							if ((getdef(i).destroydes != 1) && (getdef(j).destroydes == 1))
+								objects[j].objtype = -1;
+						}
+						if (objects[i].damage > 0) {
+							if ((objects[j].destroyable == 1) && (objects[j].hurt <= 0)) {
+								objects[j].hp -= objects[i].damage;
+								if (j == playerId) objects[j].hurt = 40;
+								else objects[j].hurt = 10;
+								if (objects[j].hp <= 0) {
+									if (i != playerId) objects[j].objtype = -1;
+								}
+
+							}
+							if ((getdef(j).destroydes != 1) && (getdef(i).destroydes == 1))
+								objects[i].objtype = -1;
+						}
+					}
+					if (termi == 1) break;
+				}
+		}
+
+	}
+
+
+}
+
+void moveObjects() {
+	for (int i = 0; i < 500; i++) {
+		if (objects[i].objtype == -1)
+			continue;
+		defobj temp = getdef(i);
+		     //  move(5, 5);
+				//addch('a');
+				//printw("%.3f", objlib[1].movemode);
+		if (objects[i].attackcd != 0) objects[i].attackcd--;
+		if (objects[i].hurt > 0) objects[i].hurt--;
+		if (temp.movemode != -1) {  //adjust dest
+			if (temp.movemode == 0) { //tracking player
+				objects[i].desx = objects[playerId].x;
+				objects[i].desy = objects[playerId].y;
+			}
+			
+		}
+
+		double dispX = objects[i].desx - objects[i].x;
+		double dispY = objects[i].desy - objects[i].y;
 		double disp = sqrt(dispX * dispX + dispY * dispY);
-		if ((fabs(dispX) > 0.01) || (fabs(dispY) > 0.01)) {
+		if ((fabs(dispX) > 0.001) || (fabs(dispY) > 0.001)) {
 			// if gameobject is not in destination, move it!
 			double deltaX, deltaY;
-			if (disp < gameObject[i].speed) {
+			if (disp < objects[i].speed) {
 				// if displacement is less than speed, move to destination directly
 				deltaX = dispX;
 				deltaY = dispY;
 			}
 			else {
-				deltaX = dispX / disp * gameObject[i].speed;
-				deltaY = dispY / disp * gameObject[i].speed;
+				deltaX = dispX / disp * (double)objects[i].speed;
+				deltaY = dispY / disp * (double)objects[i].speed;
 			}
-			gameObject[i].x += deltaX;
-			gameObject[i].y += deltaY;
-		} else {
+			int px= objects[i].x + deltaX;
+			int py= objects[i].y + deltaY;
+			if ((cango(temp,px,py) != 1) || (temp.destroydes == 1)) {
+				objects[i].x += deltaX;
+				objects[i].y += deltaY;
+			}
+			else if (temp.movemode == 1) {  //random 8 direction
+				int tempdir = (rand()) % 8;
+				objects[i].desx = objects[i].x + dirx[tempdir];
+				objects[i].desy = objects[i].y + diry[tempdir];
+
+			}
+			if ((currentmap[(int)objects[i].x][(int)objects[i].y] == 1) && (temp.destroydes == 1)) objects[i].objtype = -1;
+		}
+		else {
+		 if (temp.movemode == 1) {  //random 8 direction
+			int tempdir = (rand()) % 8;
+			objects[i].desx = objects[i].x + dirx[tempdir];
+			objects[i].desy = objects[i].y + diry[tempdir];
+
+		}
+			if (temp.destroydes == 1) objects[i].objtype = -1;
+		}
+		if (i != playerId) {    //creatures attack
+            if(temp.attackmode!=-1)
+				if (objects[i].attackcd == 0) {
+					objects[i].attackcd = temp.atkspeed;
+					int xx;
+					defobj shot = objlib[temp.attackmode];
+					if (temp.atktype == 1) {
+						xx = setupobj(temp.attackmode, shot.destroyable, shot.penetration, shot.hp, shot.damage, objects[i].x, objects[i].y, (double)1, objects[i].y, shot.color, shot.speed, shot.atkspeed);
+						xx = setupobj(temp.attackmode, shot.destroyable, shot.penetration, shot.hp, shot.damage, objects[i].x, objects[i].y, (double)48, objects[i].y, shot.color, shot.speed, shot.atkspeed);
+						xx = setupobj(temp.attackmode, shot.destroyable, shot.penetration, shot.hp, shot.damage, objects[i].x, objects[i].y, objects[i].x, (double)1, shot.color, shot.speed, shot.atkspeed);
+						xx = setupobj(temp.attackmode, shot.destroyable, shot.penetration, shot.hp, shot.damage, objects[i].x, objects[i].y, objects[i].x, (double)68, shot.color, shot.speed, shot.atkspeed);
+					}
+					else if (temp.atktype == 2) {
+						xx = setupobj(temp.attackmode, shot.destroyable, shot.penetration, shot.hp, shot.damage, objects[i].x, objects[i].y, objects[playerId].x, objects[playerId].y, shot.color, shot.speed, shot.atkspeed);
+					}
+			  }
+
+		}
+		/* else {
 			// reaches destination...
 			if (gameObject[i].destroyOnDest == TRUE && gameObject[i].turnsAlive > 0) {
 				if (gameObject[i].type == BOMB) {
@@ -201,39 +327,25 @@ void moveObjects() {
 				gameObject[i].type = NOTHING;		// destroy it!
 
 			}
+		}*/
+
+		//gameObject[i].turnsAlive++;
 		}
 
-		gameObject[i].turnsAlive++;
-		
-
-
-	}
+	calDamage();
 }
 
 void displayObjects() {
-	for (int i = 0; i < 100; i++) {
-		if (gameObject[i].type == NOTHING)
+	for (int i = 0; i < 500; i++) {
+		if (objects[i].objtype == -1)
 			continue;
 
-		int screenX = gameObject[i].x;
-		int screenY = gameObject[i].y;
-
-		if (move(screenY, screenX) != ERR) {
-			if (gameObject[i].type == PLAYER) {
-				attron(COLOR_PAIR(2));
-				addch(97 | A_ALTCHARSET);
-				if (move(screenY - 1, screenX) != ERR) {
-					addch('o');
-				}
-				attroff(COLOR_PAIR(2));
-			}
-			else if (gameObject[i].type == BULLET) {
-				addch(96 | A_ALTCHARSET);
-				
-			}
-			else if (gameObject[i].type == BOMB) {
-				addch('@');
-			}
+		int screenX = objects[i].x;
+		int screenY = objects[i].y;
+		defobj temp = getdef(i);
+		if ((move(screenX, screenY) != ERR)&&((move(screenX+temp.height-1,screenY+temp.width-1 )!=ERR))) {
+			if (objects[i].hurt>0) renderIcon(screenX, screenY, temp, 6);
+			else renderIcon(screenX, screenY, temp, objects[i].color);
 		}
 	}
 }
@@ -256,9 +368,10 @@ int setupObject(int type, double startX, double startY, double speed) {
 
 }
 
-int setupobj(int destroyable, int penetration, int hp, int damage, int x, int y, int desx, int desy, int height, int width, int icon[10][10], int attackmode,int color,int speed,int atkspeed) {
+int setupobj(int objtype,int destroyable, int penetration, int hp, int damage, double x, double y, double desx, double desy,  int color, double speed, int atkspeed) {
 	for (int i = 0; i < 500; i++) {
-		if (objects[i].destroyable != -1) continue;
+		if (objects[i].objtype != -1) continue;
+		objects[i].objtype = objtype;
 		objects[i].destroyable = destroyable;
 		objects[i].penetration = penetration;
 		objects[i].hp = hp;
@@ -267,15 +380,11 @@ int setupobj(int destroyable, int penetration, int hp, int damage, int x, int y,
 		objects[i].y = y;
 		objects[i].desx = desx;
 		objects[i].desy = desy;
-		objects[i].height = height;
-		objects[i].width = width;
-		objects[i].attackmode = attackmode;
 		objects[i].color = color;
 		objects[i].speed = speed;
 		objects[i].atkspeed = atkspeed;
-		for (int p = 0; p < height; p++)
-			for (int q = 0; q < width; q++)
-				objects[i].icon[p][q] = icon[p][q];
+		objects[i].attackcd = 0;
+		objects[i].hostile = objlib[objtype].hostile;
 		return(i);
 
   }
@@ -289,40 +398,62 @@ int doGameLoop() {
 	
 	// setup the level and player!
 	clear();
-	playerId = setupObject(PLAYER,SCREEN_WIDTH/2,SCREEN_HEIGHT/2,0.5);
-	
-	tes.destroyable = tes.damage = tes.desx = tes.desy = tes.hp = tes.x = tes.y = 0;
-	tes.width = 5;tes.height = 3;
-	tes.icon[0][0] = ' ';tes.icon[0][1] = '^';tes.icon[0][2] = '_';tes.icon[0][3] = '^';tes.icon[0][4] = ' ';tes.icon[1][0] = '<';
-	tes.icon[1][1] = '-';tes.icon[1][2] = '-';tes.icon[1][3] = '-';tes.icon[1][4] = '-';tes.icon[2][0] = '<';
-	tes.icon[2][1] = '-';tes.icon[2][2] = '-';tes.icon[2][3] = '-';tes.icon[2][4] = '-';
-	renderIcon(0,10,tes);
-
+	//playerId = setupObject(PLAYER,SCREEN_WIDTH/2,SCREEN_HEIGHT/2,0.5);
+	playerId = setupobj(0, objlib[0].destroyable, objlib[0].penetration, playerhp, objlib[0].damage, 5, 5, 5, 5, objlib[0].color, objlib[0].speed, objlib[0].atkspeed);
+	int xx;
+	xx=setupobj(2, objlib[2].destroyable, objlib[2].penetration, objlib[2].hp, objlib[2].damage, 15, 30, 15, 30, objlib[2].color, objlib[2].speed, objlib[2].atkspeed);
+	xx = setupobj(4, objlib[4].destroyable, objlib[4].penetration, objlib[4].hp, objlib[4].damage, 10, 25, 10, 25, objlib[4].color, objlib[4].speed, objlib[4].atkspeed);
 	// main game loop...
 	while (1) {
 		// 1. draw background...
+		playerhp = objects[playerId].hp;
+		if (playerhp <= 0) {
+			godie(); return 1;
+		}
 		drawBackground();
+		
+		//renderIcon(objects[playerId].x, objects[playerId].y, objlib[0], objects[0].color);
 		//renderIcon(0, 10, tes);
 		// 2. get buffered user input and determine player action
 		int ch = getch();
-		if (ch == KEY_UP) { gameObject[playerId].destY = gameObject[playerId].y - 1; playerFacing = NORTH; }
-		else if (ch == KEY_DOWN) { gameObject[playerId].destY = gameObject[playerId].y + 1; playerFacing = SOUTH; }
-		else if (ch == KEY_LEFT) { gameObject[playerId].destX = gameObject[playerId].x - 1; playerFacing = WEST; }
-		else if (ch == KEY_RIGHT) { gameObject[playerId].destX = gameObject[playerId].x + 1; playerFacing = EAST; }
-		else if (ch == ' ') {
+		if (ch == KEY_UP) { objects[playerId].desx = objects[playerId].x - 1; playerFacing = NORTH; }
+		else if (ch == KEY_DOWN) { objects[playerId].desx = objects[playerId].x + 1; playerFacing = SOUTH; }
+		else if (ch == KEY_LEFT) { objects[playerId].desy = objects[playerId].y - 1; playerFacing = WEST; }
+		else if (ch == KEY_RIGHT) { objects[playerId].desy = objects[playerId].y + 1; playerFacing = EAST; }
+		else if ((ch == 's')&&(objects[playerId].attackcd==0)) {
+			                       objects[playerId].attackcd = objects[playerId].atkspeed;
+			                      int bb = getdef(playerId).attackmode;
+                                  int b_id = setupobj(bb,objlib[bb].destroyable,objlib[bb].penetration,objlib[bb].hp,objlib[bb].damage,objects[playerId].x,objects[playerId].y, objects[playerId].x+shootrange, objects[playerId].y,objlib[bb].color,objlib[bb].speed,objlib[bb].atkspeed); 
+		                   }
+		else if ((ch == 'w') && (objects[playerId].attackcd == 0)) {
+			objects[playerId].attackcd = objects[playerId].atkspeed;
+			int bb = getdef(playerId).attackmode;
+			int b_id = setupobj(bb, objlib[bb].destroyable, objlib[bb].penetration, objlib[bb].hp, objlib[bb].damage, objects[playerId].x, objects[playerId].y, objects[playerId].x- shootrange, objects[playerId].y , objlib[bb].color, objlib[bb].speed, objlib[bb].atkspeed);
+		}
+		else if ((ch == 'a') && (objects[playerId].attackcd == 0)) {
+			objects[playerId].attackcd = objects[playerId].atkspeed;
+			int bb = getdef(playerId).attackmode;
+			int b_id = setupobj(bb, objlib[bb].destroyable, objlib[bb].penetration, objlib[bb].hp, objlib[bb].damage, objects[playerId].x, objects[playerId].y, objects[playerId].x, objects[playerId].y-shootrange, objlib[bb].color, objlib[bb].speed, objlib[bb].atkspeed);
+		}
+		else if ((ch == 'd') && (objects[playerId].attackcd == 0)) {
+			objects[playerId].attackcd = objects[playerId].atkspeed;
+			int bb = getdef(playerId).attackmode;
+			int b_id = setupobj(bb, objlib[bb].destroyable, objlib[bb].penetration, objlib[bb].hp, objlib[bb].damage, objects[playerId].x, objects[playerId].y, objects[playerId].x, objects[playerId].y + shootrange, objlib[bb].color, objlib[bb].speed, objlib[bb].atkspeed);
+		}
+		/*else if (ch == ' ') {
 			// shoot!
 			int bulletId = setupObject(BULLET, gameObject[playerId].x, gameObject[playerId].y, 0.5);
 			gameObject[bulletId].destX = gameObject[playerId].x + DIRECTION2X[playerFacing] * 20;
 			gameObject[bulletId].destY = gameObject[playerId].y + DIRECTION2Y[playerFacing] * 20;
 			gameObject[bulletId].destroyOnDest = TRUE;
-		}
+		}*/
 
-		else if (ch == 'b') {
+		/*else if (ch == 'b') {
 			int bombId = setupObject(BOMB, gameObject[playerId].x, gameObject[playerId].y, 0.25);
 			gameObject[bombId].destX = gameObject[playerId].x + DIRECTION2X[playerFacing] * 10;
 			gameObject[bombId].destY = gameObject[playerId].y + DIRECTION2Y[playerFacing] * 10;
 			gameObject[bombId].destroyOnDest = TRUE;
-		}
+		}*/
 		
 
 		// 3. update all game objects positions
@@ -362,16 +493,21 @@ int main()
 		for (int j = 0; j < mapwidth; j++)
 			fscanf(MAP, "%d", &currentmap[i][j]); 
 	fclose(MAP);
+	init_objlib(objlib);  // initialize types of creatures, bullets...
 
 	// Set up colors...colors are always in pairs in a terminal!
 	init_Color();
 	init_main();
 	adjustWindowSize();
 	// Game logic!
+	int termi=0;
 	while (1) {
-		int selectedMenu = doMenu();
-		if (selectedMenu == 1) exit(0);
-		else doGameLoop();
+		if (termi == 1) sleep(50);
+		else {
+			int selectedMenu = doMenu();
+			if (selectedMenu == 1) exit(0);
+			else termi = doGameLoop();
+		}
 	}
 	
 
@@ -418,12 +554,13 @@ void showcon() {
 }
 
 void init_main() {
+	srand((unsigned)time(NULL));
 	pl_multime= (char*)malloc(20 * sizeof(char));
 	pl_onetime= (char*)malloc(20 * sizeof(char));
 	pl_multime = "Roll";
 	pl_onetime = "The moon";
 	for (int i = 0; i < 500; i++)
-		objects[i].destroyable = -1;
+		objects[i].objtype = -1;
 	return;
 }
 
